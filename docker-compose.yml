@@ -20,13 +20,13 @@ services:
       - "${DB_PORT}:5432"
     volumes:
       - db_data:/var/lib/postgresql/data
-    networks:
-      - internal-network
+    # networks:
+      # - internal-network
 
-  networks:
-    app-network:
-    internal-network:
-      internal: true
+  # networks:
+  #   # app-network:
+  #   internal-network:
+  #     internal: true
 
-  volumes:
-      db_data:
+volumes:
+  db_data:
