@@ -1,0 +1,32 @@
+services:
+  # app:
+  #   build: .
+  #   environment:
+  #     DB_URL: ${DB_URL}
+  #   ports:
+  #     - "8000:8000"
+  #   depends_on:
+  #     - db
+  #   networks:
+  #     - app-network
+  #     - internal-network
+  db:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    ports:
+      - "${DB_PORT}:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    networks:
+      - internal-network
+
+  networks:
+    app-network:
+    internal-network:
+      internal: true
+
+  volumes:
+      db_data:

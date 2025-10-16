@@ -1,0 +1,27 @@
+{
+  "name": "blogaggregator",
+  "version": "1.0.0",
+  "description": "a CLI tool that allows users to:",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "tsx ./src/index.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AGX18/Gator.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/AGX18/Gator/issues"
+  },
+  "homepage": "https://github.com/AGX18/Gator#readme",
+  "devDependencies": {
+    "@types/node": "^24.7.2",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}
