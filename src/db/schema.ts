@@ -1,7 +1,7 @@
 import { relations } from "drizzle-orm";
 import { pgTable, timestamp, uuid, text, unique } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
-
+import { z } from "zod";
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom().notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -24,6 +24,7 @@ export const feeds = pgTable("feeds", {
   user_id: uuid("user_id")
     .notNull()
     .references(() => users.id, { onDelete: 'cascade' }),
+  last_fetched_at: timestamp("last_fetched_at"),
 });
 
 export const feed_follows = pgTable("feed_follows", {
@@ -77,3 +78,9 @@ export const insertFeedSchema = createInsertSchema(feeds);
 
 export const selectUserSchema = createSelectSchema(users);
 export const selectFeedSchema = createSelectSchema(feeds);
+
+export type InsertUser = z.infer<typeof insertUserSchema>;
+export type InsertFeed = z.infer<typeof insertFeedSchema>;
+
+export type SelectUser = z.infer<typeof selectUserSchema>;
+export type SelectFeed = z.infer<typeof selectFeedSchema>;

@@ -2,7 +2,7 @@ import { setUser, readConfig } from "src/config";
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from "postgres";
 import { createUser, deleteAllUsers, getAllUsers, getUserByName } from "./db/queries/users";
-import { createFeed, getAllFeedsWithUsers, getFeedByURL } from "./db/queries/feeds";
+import { createFeed, getAllFeedsWithUsers, getFeedByURL, getNextFeedToFetch, markFeedFetched, deleteFeedById } from "./db/queries/feeds";
 import { createFeedFollow, deleteFeedFollow, getFeedFollowByUser } from "./db/queries/feed_follows";
 import { XMLParser } from "fast-xml-parser";
 import { z } from 'zod'
@@ -54,8 +54,9 @@ async function main() {
     registerCommand(commands, 'register', registerHandler);
     registerCommand(commands, 'reset', resetHandler);
     registerCommand(commands, 'users', usersHandler);
-    registerCommand(commands, 'agg', aggHandler);
+    registerCommand(commands, 'agg', middlewareLoggedIn(aggHandler));
     registerCommand(commands, 'addfeed', middlewareLoggedIn(addfeedHandler));
+    registerCommand(commands, 'deletefeed', middlewareLoggedIn(deleteFeedHandler));
     registerCommand(commands, 'checkdb', checkDbConnection);
     registerCommand(commands, 'feeds', feedsHandler);
     registerCommand(commands, 'follow', middlewareLoggedIn(followHandler));
@@ -197,12 +198,49 @@ async function fetchFeed(feedURL: string) {
     return rssFeed;
 }
 
+function parseDuration(durationStr: string): number {
+    const regex = /^(\d+)(ms|s|m|h)$/;
+    const match = durationStr.match(regex);
+   if (!match) {
+       throw new Error("Invalid duration format.");
+   }
+   const value = parseInt(match[1], 10);
+   const unit = match[2];
+   switch (unit) {
+       case "ms":
+           return value;
+       case "s":
+           return value * 1000;
+       case "m":
+           return value * 1000 * 60;
+       case "h":
+           return value * 1000 * 60 * 60;
+       default:
+           throw new Error("Invalid duration unit.");
+   }
+}
 
-async function aggHandler(cmdName: string, ...args: string[]) {
-    const res = await fetchFeed("https://www.wagslane.dev/index.xml");
-    res.channel.item.forEach(item => {
-        console.log(item);
+async function aggHandler(cmdName: string, user: User, ...args: string[]) {
+    if (args.length < 1) {
+        throw new Error("time between fetches is required.");
+    }
+    const durationMs = parseDuration(args[0]);
+    const interval = setInterval(() => {
+        scrapeFeeds(user).catch(handleError);
+    }, durationMs);
+
+    await new Promise<void>((resolve) => {
+        process.on("SIGINT", () => {
+            console.log("Shutting down feed aggregator...");
+            clearInterval(interval);
+            resolve();
+        });
     });
+
+}
+
+function handleError(error: any) {
+    console.error("Error during feed scraping:", error);
 }
 
 async function addfeedHandler(cmdName: string, user: User, ...args: string[]) {
@@ -280,4 +318,29 @@ async function unfollowHandler(cmdName: string, user: User, ...args: string[] ) 
     }
     await deleteFeedFollow(user.id, feed.id);
     console.log(`Deleted feed follow for user ${user.name}: ${feed.name}`);
+}
+
+
+async function scrapeFeeds(user: User) {
+        const res = await getNextFeedToFetch(user.id);
+        await markFeedFetched(res.id);
+        const feedData = await fetchFeed(res.url);
+        console.log();
+        console.log(`feed from: ${res.url}`);
+        feedData.channel.item.forEach(item => {
+            console.log(`- ${item.title}`);
+        });
+}
+
+async function deleteFeedHandler(cmdName: string, user: User, ...args: string[]): Promise<void> {
+    if (args.length < 1) {
+        throw new Error("Feed URL is required to remove a feed.");
+    }
+    const feedURL = args[0];
+    const feed = await getFeedByURL(feedURL.trim());
+    if (!feed) {
+        throw new Error(`Feed with URL ${feedURL} does not exist.`);
+    }
+    await deleteFeedById(feed.id);
+    console.log(`Deleted feed for user ${user.name}: ${feed.name}`);
 }
