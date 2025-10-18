@@ -3,7 +3,7 @@ import { users } from "../schema";
 import { eq } from "drizzle-orm";
 
 export async function createUser(name: string) {
-  const [result] = await db.insert(users).values({ name: name }).returning();
+  const [result] = await db.insert(users).values({ name: name.trim() }).returning();
   return result;
 }
 
@@ -18,4 +18,8 @@ export async function deleteAllUsers() {
 
 export async function getAllUsers() {
   return await db.select().from(users);
+}
+
+export function getUserById(id: string) {
+  return db.select().from(users).where(eq(users.id, id));
 }

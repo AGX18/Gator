@@ -2,12 +2,14 @@ import { setUser, readConfig } from "src/config";
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from "postgres";
 import { createUser, deleteAllUsers, getAllUsers, getUserByName } from "./db/queries/users";
-import { createFeed } from "./db/queries/feeds";
+import { createFeed, getAllFeedsWithUsers, getFeedByURL } from "./db/queries/feeds";
+import { createFeedFollow, getFeedFollowByUser } from "./db/queries/feed_follows";
 import { XMLParser } from "fast-xml-parser";
 import { z } from 'zod'
 import * as schema from "./db/schema";
 import { sql } from "drizzle-orm";
 import { db } from "src/db/index";
+import { get } from "http";
 
 const config = readConfig();
 
@@ -26,6 +28,9 @@ async function main() {
     registerCommand(commands, 'agg', aggHandler);
     registerCommand(commands, 'addfeed', addfeedHandler);
     registerCommand(commands, 'checkdb', checkDbConnection);
+    registerCommand(commands, 'feeds', feedsHandler);
+    registerCommand(commands, 'follow', followHandler);
+    registerCommand(commands, 'following', followingHandler);
     
     const args = process.argv.slice(2);
     if (args.length === 0) {
@@ -175,13 +180,14 @@ async function addfeedHandler(cmdName: string, ...args: string[]) {
     if (args.length < 2) {
         throw new Error("Feed URL and name are required to add a feed.");
     }
-    const [feedURL, feedName] = args;
+    const [feedName, feedURL] = args;
     const currentUser = await getUserByName(config.currentUserName!);
     if (!currentUser) {
         throw new Error("No current user set. Please login or register first.");
     }
 
-    const newFeed = await createFeed(feedName, currentUser.id, feedURL);
+    const newFeed = await createFeed(feedName, currentUser.id, feedURL.trim());
+    await createFeedFollow(currentUser.id, newFeed.id);
     printFeed(newFeed, currentUser);
 }
 
@@ -199,3 +205,56 @@ async function checkDbConnection(cmdName: string, ...args: string[]) {
   }
 }
 
+/**
+ * a way to inspect all the feeds in the database.
+ * @param cmdName the command name
+ * @param args here it's empty
+ */
+async function feedsHandler(cmdName: string, ...args: string[]) {
+    const allFeeds = await getAllFeedsWithUsers();
+    allFeeds.forEach(({ feeds, users }) => {
+        console.log(`Feed: ${feeds.name} (URL: ${feeds.url}) for User: ${users.name}`);
+    });
+}
+
+/**
+ * 
+ * It takes a single url argument and creates a new feed follow record for the current user.
+ */
+async function followHandler(cmdName: string, ...args: string[]) {
+    if (args.length < 1) {
+        throw new Error("Feed URL is required to follow a feed.");
+    }
+    const feedURL = args[0];
+    const currentUser = await getUserByName(config.currentUserName!);
+    if (!currentUser) {
+        throw new Error("No current user set. Please login or register first.");
+    }
+    const feed = await getFeedByURL(feedURL.trim());
+    if (!feed) {
+        throw new Error(`Feed with URL ${feedURL} does not exist. Please add the feed first.`);
+    }
+    const newFeedFollow = await createFeedFollow(currentUser.id, feed.id);
+    console.log(`User ${newFeedFollow.users.name} is now following feed ${newFeedFollow.feeds.name}`);
+}
+
+async function getFeedFollowsForUser(username: string) {
+    const user = await getUserByName(username);
+    if (!user) {
+        throw new Error(`User with name ${username} does not exist.`);
+    }
+    const userId = user.id;
+    const feedFollows = await getFeedFollowByUser(userId);
+    console.log(`Feed follows for user ${username}:`);
+    feedFollows.forEach(feedFollow => {
+        console.log(`* feed: ${feedFollow.feeds.name} (URL: ${feedFollow.feeds.url})`);
+    });
+}
+
+async function followingHandler(cmdName: string, ...args: string[] ) {
+    if (!config.currentUserName) {
+        throw new Error("No current user set. Please login or register first.");
+    }
+    await getFeedFollowsForUser(config.currentUserName);
+
+}
