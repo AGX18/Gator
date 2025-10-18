@@ -27,6 +27,10 @@ type UserCommandHandler = (
 const middlewareLoggedIn = (handler: UserCommandHandler): CommandHandler => {
     return async (cmdName: string, ...args: string[]) => {
         const currentUserName = config.currentUserName;
+        console.log("Current user from config:", currentUserName);
+        if (!currentUserName) {
+            throw new Error("No user is currently logged in. Please login first.");
+        }
         const user = await getUserByName(currentUserName);
         if (!user) {
             throw new Error(`User ${currentUserName} does not exist. Please register first.`);
@@ -46,8 +50,8 @@ const middlewareLoggedIn = (handler: UserCommandHandler): CommandHandler => {
 type CommandsRegistry = Record<string, CommandHandler>;
 async function main() {
     const commands: CommandsRegistry = {};
-    registerCommand(commands, 'login', middlewareLoggedIn(loginHandler));
-    registerCommand(commands, 'register', middlewareLoggedIn(registerHandler));
+    registerCommand(commands, 'login', loginHandler);
+    registerCommand(commands, 'register', registerHandler);
     registerCommand(commands, 'reset', resetHandler);
     registerCommand(commands, 'users', usersHandler);
     registerCommand(commands, 'agg', aggHandler);
@@ -93,15 +97,20 @@ async function runCommand(registry: CommandsRegistry, cmdName: string, ...args: 
  * @param args - An optional array of string arguments passed to the command.
  * @returns Promise<void>.
  */
-async function loginHandler(cmdName: string, user: User, ...args: string[]): Promise<void> {
+async function loginHandler(cmdName: string, ...args: string[]): Promise<void> {
     if (args.length < 1) {
         console.error("Username is required for login.");
+        return;
+    }
+    const user = await getUserByName(args[0]);
+    if (!user) {
+        console.error(`User ${args[0]} does not exist. Please register first.`);
         return;
     }
     setUser(user.name);
     console.log(`User set to ${user.name}`);
 }
-async function registerHandler(cmdName: string, user: User, ...args: string[]): Promise<void> {
+async function registerHandler(cmdName: string, ...args: string[]): Promise<void> {
     if (args.length < 1) {
         console.error("Username is required for registration.");
         return;
