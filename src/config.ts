@@ -20,22 +20,10 @@ export function setUser(name: string) {
     writeConfig(cfg);
 }
 
-export function readConfig(): Config | null {
+export function readConfig(): Config {
     const configPath = getConfigFilePath();
-    let config : Config | null = null; 
-    if (fs.existsSync(configPath)) {
-        const data = fs.readFileSync(configPath, 'utf-8');
-        try {
-            config = JSON.parse(data) as Config;
-        } catch (e) {
-            console.error("Error parsing configuration file:", e);
-            return null;
-        }
-    } else {
-        console.error("Configuration file does not exist. Creating one with default values.");
-        config = { dbUrl: "postgres://example", currentUserName: "user" };
-        writeConfig(config);
-    }
+    const data = fs.readFileSync(configPath, 'utf-8');
+    const config = JSON.parse(data);
     return validateConfig(config);
 }
 
@@ -49,13 +37,13 @@ function writeConfig(cfg: Config): void {
 
 function validateConfig(rawConfig: any): Config {
     if (!rawConfig) {
-        console.error("Configuration file not found. Please set up your configuration.");
+        throw new Error("Configuration file not found. Please set up your configuration.");
     }
-    if (typeof rawConfig.dbUrl !== 'string' || rawConfig.dbUrl.trim() === '') {
-        console.error("Invalid or missing 'dbUrl' in configuration.");
+    if (typeof rawConfig.dbUrl !== 'string' || !rawConfig.dbUrl) {
+        throw new Error("Invalid or missing 'dbUrl' in configuration.");
     }
-    if (typeof rawConfig.currentUserName !== 'string' || rawConfig.currentUserName.trim() === '') {
-        console.error("Invalid or missing 'currentUserName' in configuration.");
+    if (typeof rawConfig.currentUserName !== 'string' || !rawConfig.currentUserName) {
+        throw new Error("Invalid or missing 'currentUserName' in configuration.");
     }
     return rawConfig as Config;
 }
