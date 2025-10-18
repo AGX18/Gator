@@ -10,8 +10,33 @@ import * as schema from "./db/schema";
 import { sql } from "drizzle-orm";
 import { db } from "src/db/index";
 import { get } from "http";
+import { User } from "./db/schema";
 
 const config = readConfig();
+
+
+
+type CommandHandler = (cmdName: string, ...args: string[]) => Promise<void>;
+
+type UserCommandHandler = (
+  cmdName: string,
+  user: User,
+  ...args: string[]
+) => Promise<void>;
+
+const middlewareLoggedIn = (handler: UserCommandHandler): CommandHandler => {
+    return async (cmdName: string, ...args: string[]) => {
+        const currentUserName = config.currentUserName;
+        const user = await getUserByName(currentUserName);
+        if (!user) {
+            throw new Error(`User ${currentUserName} does not exist. Please register first.`);
+        }
+        await handler(cmdName, user, ...args);
+    }
+};
+
+
+
 
 
 /**
@@ -21,16 +46,16 @@ const config = readConfig();
 type CommandsRegistry = Record<string, CommandHandler>;
 async function main() {
     const commands: CommandsRegistry = {};
-    registerCommand(commands, 'login', loginHandler);
-    registerCommand(commands, 'register', registerHandler);
+    registerCommand(commands, 'login', middlewareLoggedIn(loginHandler));
+    registerCommand(commands, 'register', middlewareLoggedIn(registerHandler));
     registerCommand(commands, 'reset', resetHandler);
     registerCommand(commands, 'users', usersHandler);
     registerCommand(commands, 'agg', aggHandler);
-    registerCommand(commands, 'addfeed', addfeedHandler);
+    registerCommand(commands, 'addfeed', middlewareLoggedIn(addfeedHandler));
     registerCommand(commands, 'checkdb', checkDbConnection);
     registerCommand(commands, 'feeds', feedsHandler);
-    registerCommand(commands, 'follow', followHandler);
-    registerCommand(commands, 'following', followingHandler);
+    registerCommand(commands, 'follow', middlewareLoggedIn(followHandler));
+    registerCommand(commands, 'following', middlewareLoggedIn(followingHandler));
     
     const args = process.argv.slice(2);
     if (args.length === 0) {
@@ -68,21 +93,15 @@ async function runCommand(registry: CommandsRegistry, cmdName: string, ...args: 
  * @param args - An optional array of string arguments passed to the command.
  * @returns Promise<void>.
  */
-type CommandHandler = (cmdName: string, ...args: string[]) => Promise<void>;
-async function loginHandler(cmdName: string, ...args: string[]): Promise<void> {
+async function loginHandler(cmdName: string, user: User, ...args: string[]): Promise<void> {
     if (args.length < 1) {
         console.error("Username is required for login.");
         return;
     }
-
-    const user = await getUserByName(args[0]);
-    if (!user) {
-        throw new Error(`User with name ${args[0]} does not exist. Please register first.`);
-    }
-    setUser(args[0]);
-    console.log(`User set to ${args[0]}`);
+    setUser(user.name);
+    console.log(`User set to ${user.name}`);
 }
-async function registerHandler(cmdName: string, ...args: string[]): Promise<void> {
+async function registerHandler(cmdName: string, user: User, ...args: string[]): Promise<void> {
     if (args.length < 1) {
         console.error("Username is required for registration.");
         return;
@@ -176,19 +195,15 @@ async function aggHandler(cmdName: string, ...args: string[]) {
     });
 }
 
-async function addfeedHandler(cmdName: string, ...args: string[]) {
+async function addfeedHandler(cmdName: string, user: User, ...args: string[]) {
     if (args.length < 2) {
         throw new Error("Feed URL and name are required to add a feed.");
     }
     const [feedName, feedURL] = args;
-    const currentUser = await getUserByName(config.currentUserName!);
-    if (!currentUser) {
-        throw new Error("No current user set. Please login or register first.");
-    }
 
-    const newFeed = await createFeed(feedName, currentUser.id, feedURL.trim());
-    await createFeedFollow(currentUser.id, newFeed.id);
-    printFeed(newFeed, currentUser);
+    const newFeed = await createFeed(feedName, user.id, feedURL.trim());
+    await createFeedFollow(user.id, newFeed.id);
+    printFeed(newFeed, user);
 }
 
 async function printFeed(feed:schema.Feed, user: schema.User) {
@@ -221,40 +236,25 @@ async function feedsHandler(cmdName: string, ...args: string[]) {
  * 
  * It takes a single url argument and creates a new feed follow record for the current user.
  */
-async function followHandler(cmdName: string, ...args: string[]) {
+async function followHandler(cmdName: string, user: User, ...args: string[]) {
     if (args.length < 1) {
         throw new Error("Feed URL is required to follow a feed.");
     }
     const feedURL = args[0];
-    const currentUser = await getUserByName(config.currentUserName!);
-    if (!currentUser) {
-        throw new Error("No current user set. Please login or register first.");
-    }
     const feed = await getFeedByURL(feedURL.trim());
     if (!feed) {
         throw new Error(`Feed with URL ${feedURL} does not exist. Please add the feed first.`);
     }
-    const newFeedFollow = await createFeedFollow(currentUser.id, feed.id);
+    const newFeedFollow = await createFeedFollow(user.id, feed.id);
     console.log(`User ${newFeedFollow.users.name} is now following feed ${newFeedFollow.feeds.name}`);
 }
 
-async function getFeedFollowsForUser(username: string) {
-    const user = await getUserByName(username);
-    if (!user) {
-        throw new Error(`User with name ${username} does not exist.`);
-    }
-    const userId = user.id;
-    const feedFollows = await getFeedFollowByUser(userId);
-    console.log(`Feed follows for user ${username}:`);
+
+async function followingHandler(cmdName: string, user: User, ...args: string[] ) {
+    const feedFollows = await getFeedFollowByUser(user.id);
+    console.log(`Feed follows for user ${user.name}:`);
     feedFollows.forEach(feedFollow => {
         console.log(`* feed: ${feedFollow.feeds.name} (URL: ${feedFollow.feeds.url})`);
     });
-}
-
-async function followingHandler(cmdName: string, ...args: string[] ) {
-    if (!config.currentUserName) {
-        throw new Error("No current user set. Please login or register first.");
-    }
-    await getFeedFollowsForUser(config.currentUserName);
 
 }
