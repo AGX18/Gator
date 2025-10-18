@@ -3,7 +3,7 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from "postgres";
 import { createUser, deleteAllUsers, getAllUsers, getUserByName } from "./db/queries/users";
 import { createFeed, getAllFeedsWithUsers, getFeedByURL } from "./db/queries/feeds";
-import { createFeedFollow, getFeedFollowByUser } from "./db/queries/feed_follows";
+import { createFeedFollow, deleteFeedFollow, getFeedFollowByUser } from "./db/queries/feed_follows";
 import { XMLParser } from "fast-xml-parser";
 import { z } from 'zod'
 import * as schema from "./db/schema";
@@ -60,6 +60,7 @@ async function main() {
     registerCommand(commands, 'feeds', feedsHandler);
     registerCommand(commands, 'follow', middlewareLoggedIn(followHandler));
     registerCommand(commands, 'following', middlewareLoggedIn(followingHandler));
+    registerCommand(commands, 'unfollow', middlewareLoggedIn(unfollowHandler));
     
     const args = process.argv.slice(2);
     if (args.length === 0) {
@@ -266,4 +267,17 @@ async function followingHandler(cmdName: string, user: User, ...args: string[] )
         console.log(`* feed: ${feedFollow.feeds.name} (URL: ${feedFollow.feeds.url})`);
     });
 
+}
+
+async function unfollowHandler(cmdName: string, user: User, ...args: string[] ) {
+    if (args.length < 1) {
+        throw new Error("Feed URL is required to unfollow a feed.");
+    }
+    const feedURL = args[0];
+    const feed = await getFeedByURL(feedURL.trim());
+    if (!feed) {
+        throw new Error(`Feed with URL ${feedURL} does not exist.`);
+    }
+    await deleteFeedFollow(user.id, feed.id);
+    console.log(`Deleted feed follow for user ${user.name}: ${feed.name}`);
 }

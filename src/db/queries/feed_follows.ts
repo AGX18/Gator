@@ -30,3 +30,9 @@ export async function getFeedFollowByUser(user_id: string) {
         .where(eq(feed_follows.user_id, user_id));
     return feedFollow;
 }
+
+
+export async function deleteFeedFollow(user_id: string, feed_id: string) {
+    await db.delete(feed_follows)
+        .where(and(eq(feed_follows.user_id, user_id), eq(feed_follows.feed_id, feed_id)));
+}
