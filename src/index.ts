@@ -7,10 +7,9 @@ import { XMLParser } from "fast-xml-parser";
 import { z } from 'zod'
 import * as schema from "./db/schema";
 import { sql } from "drizzle-orm";
+import { db } from "src/db/index";
 
 const config = readConfig();
-const conn = postgres(config.dbUrl);
-export const db = drizzle(conn, { schema });
 
 
 /**
@@ -191,13 +190,12 @@ async function printFeed(feed:schema.Feed, user: schema.User) {
 }
 
 
-export async function checkDbConnection(cmdName: string, ...args: string[]) {
+async function checkDbConnection(cmdName: string, ...args: string[]) {
   try {
-    // Execute a raw, simple query.
-    // The `sql` template literal from Drizzle is perfect for this.
     await db.execute(sql`SELECT 1`);
     console.log('✅ Database connection is healthy.');
   } catch (error: any) {
     console.error('❌ Database connection failed:', error);
   }
 }
+
