@@ -1,4 +1,4 @@
-import { relations } from "drizzle-orm";
+import { desc, relations } from "drizzle-orm";
 import { pgTable, timestamp, uuid, text, unique } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -46,6 +46,23 @@ export const feed_follows = pgTable("feed_follows", {
 ]);
 
 
+export const posts = pgTable("posts", {
+  id: uuid("id").primaryKey().defaultRandom().notNull(),
+  created_at: timestamp("created_at").notNull().defaultNow(),
+  updated_at: timestamp("updated_at")
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
+  title: text("title").notNull(),
+  url: text("url").notNull().unique(),
+  description: text("description"),
+  published_at: timestamp("published_at").notNull(),
+  feed_id: uuid("feed_id")
+    .notNull()
+    .references(() => feeds.id, { onDelete: 'cascade' }),
+});
+
+
 export const userRelation = relations(users, ({ many }) => ({
   feeds: many(feeds),
   feedFollows: many(feed_follows),
@@ -84,3 +101,10 @@ export type InsertFeed = z.infer<typeof insertFeedSchema>;
 
 export type SelectUser = z.infer<typeof selectUserSchema>;
 export type SelectFeed = z.infer<typeof selectFeedSchema>;
+
+export const insertPostSchema = createInsertSchema(posts);
+
+export const selectPostSchema = createSelectSchema(posts);
+
+export type InsertPost = z.infer<typeof insertPostSchema>;
+export type SelectPost = z.infer<typeof selectPostSchema>;

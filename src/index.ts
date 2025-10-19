@@ -4,6 +4,7 @@ import postgres from "postgres";
 import { createUser, deleteAllUsers, getAllUsers, getUserByName } from "./db/queries/users";
 import { createFeed, getAllFeedsWithUsers, getFeedByURL, getNextFeedToFetch, markFeedFetched, deleteFeedById } from "./db/queries/feeds";
 import { createFeedFollow, deleteFeedFollow, getFeedFollowByUser } from "./db/queries/feed_follows";
+import { getPostsForUser} from "./db/queries/posts";
 import { XMLParser } from "fast-xml-parser";
 import { z } from 'zod'
 import * as schema from "./db/schema";
@@ -11,6 +12,8 @@ import { sql } from "drizzle-orm";
 import { db } from "src/db/index";
 import { get } from "http";
 import { User } from "./db/schema";
+import { createPost } from "./db/queries/posts";
+import { ar } from "zod/v4/locales";
 
 const config = readConfig();
 
@@ -62,6 +65,7 @@ async function main() {
     registerCommand(commands, 'follow', middlewareLoggedIn(followHandler));
     registerCommand(commands, 'following', middlewareLoggedIn(followingHandler));
     registerCommand(commands, 'unfollow', middlewareLoggedIn(unfollowHandler));
+    registerCommand(commands, 'browse', middlewareLoggedIn(browseHandler));
     
     const args = process.argv.slice(2);
     if (args.length === 0) {
@@ -323,12 +327,17 @@ async function unfollowHandler(cmdName: string, user: User, ...args: string[] ) 
 
 async function scrapeFeeds(user: User) {
         const res = await getNextFeedToFetch(user.id);
-        await markFeedFetched(res.id);
+        const returnValue = await markFeedFetched(res.id);
+        console.log(`Fetching feed: ${res.url} (last fetched at: ${returnValue.last_fetched_at})\n`);
         const feedData = await fetchFeed(res.url);
-        console.log();
-        console.log(`feed from: ${res.url}`);
         feedData.channel.item.forEach(item => {
-            console.log(`- ${item.title}`);
+            createPost({
+                title: item.title,
+                url: item.link,
+                description: item.description,
+                feed_id: res.id,
+                published_at: new Date(item.pubDate)
+            }).catch(handleError);
         });
 }
 
@@ -343,4 +352,15 @@ async function deleteFeedHandler(cmdName: string, user: User, ...args: string[])
     }
     await deleteFeedById(feed.id);
     console.log(`Deleted feed for user ${user.name}: ${feed.name}`);
+}
+
+async function browseHandler(cmdName: string, user: User, ...args: string[]) {
+    let limit = 2;
+    if (args.length >= 1) {
+        limit = parseInt(args[0], 10);
+    }
+    const posts = await getPostsForUser(user.id, limit);
+    posts.forEach(post => {
+        console.log(`* ${post.title} (URL: ${post.url})`);
+    });
 }
